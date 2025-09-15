@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 use std::collections::HashMap;
-use chrono::{Datelike, NaiveDate, NaiveDateTime, Weekday};
+use chrono::{Datelike, NaiveDate, NaiveDateTime, Weekday, Timelike};
 use std::error::Error;
 use std::path::Path;
 use serde::{Deserialize, Serialize};
@@ -28,12 +28,8 @@ pub struct DailySessionTableAgg {
     pub as_high_time: String,
     pub ln_low_time: String,
     pub ln_high_time: String,
-    pub nyam_low_time: String,
-    pub nyam_high_time: String,
-    pub nyl_low_time: String,
-    pub nyl_high_time: String,
-    pub nypm_low_time: String,
-    pub nypm_high_time: String,
+    pub ny_low_time: String, // Combined NY low time
+    pub ny_high_time: String, // Combined NY high time
 }
 
 impl CsvRecord for DailySessionTableAgg {
@@ -42,8 +38,8 @@ impl CsvRecord for DailySessionTableAgg {
             "Date", "Week", "Day", "DayCandlePattern", "AS_CandlePattern", "LN_CandlePattern",
             "NYAM_CandlePattern", "NYL_CandlePattern", "NYPM_CandlePattern", 
             "DayHighSession", "DayLowSession",
-            "AS_LowTime", "AS_HighTime", "LN_LowTime", "LN_HighTime", "NYAM_LowTime", 
-            "NYAM_HighTime", "NYL_LowTime", "NYL_HighTime", "NYPM_LowTime", "NYPM_HighTime",
+            "AS_LowTime", "AS_HighTime", "LN_LowTime", "LN_HighTime", 
+            "NY_LowTime", "NY_HighTime",
         ]
     }
 
@@ -64,12 +60,8 @@ impl CsvRecord for DailySessionTableAgg {
             self.as_high_time.clone(),
             self.ln_low_time.clone(),
             self.ln_high_time.clone(),
-            self.nyam_low_time.clone(),
-            self.nyam_high_time.clone(),
-            self.nyl_low_time.clone(),
-            self.nyl_high_time.clone(),
-            self.nypm_low_time.clone(),
-            self.nypm_high_time.clone(),
+            self.ny_low_time.clone(),
+            self.ny_high_time.clone(),
         ]
     }
 }
@@ -101,9 +93,15 @@ pub fn aggregate_daily_session_table(session_aggs: &[SessionAgg]) -> Vec<DailySe
         let mut day_high_session = String::new();
         let mut day_low_session = String::new();
 
+        let mut ny_high = f64::MIN;
+        let mut ny_low = f64::MAX;
+        let mut ny_high_time = String::new();
+        let mut ny_low_time = String::new();
+
         let mut session_data: HashMap<String, (String, String, String)> = HashMap::new();
 
         for session in &sorted_sessions {
+            // 1. Calculate overall day high/low
             if session.high > day_high {
                 day_high = session.high;
                 day_high_session = session.session.as_str().to_string();
@@ -113,11 +111,27 @@ pub fn aggregate_daily_session_table(session_aggs: &[SessionAgg]) -> Vec<DailySe
                 day_low_session = session.session.as_str().to_string();
             }
 
+            // 2. Calculate combined NY high/low and their times
+            if session.session == Session::NYAM || session.session == Session::NYL || session.session == Session::NYPM {
+                if session.high > ny_high {
+                    ny_high = session.high;
+                    // Store the formatted hour
+                    ny_high_time = parse_ts_to_naive(&session.high_ts).map(|dt| dt.hour().to_string()).unwrap_or_default();
+                }
+                if session.low < ny_low {
+                    ny_low = session.low;
+                    // Store the formatted hour
+                    ny_low_time = parse_ts_to_naive(&session.low_ts).map(|dt| dt.hour().to_string()).unwrap_or_default();
+                }
+            }
+
+            // 3. Store individual session data for the final output
             session_data.insert(
                 session.session.as_str().to_string(),
                 (
-                    session.low_ts.clone(),
-                    session.high_ts.clone(),
+                    // Format all times to only show the hour
+                    parse_ts_to_naive(&session.low_ts).map(|dt| dt.hour().to_string()).unwrap_or_default(),
+                    parse_ts_to_naive(&session.high_ts).map(|dt| dt.hour().to_string()).unwrap_or_default(),
                     pattern_from_ohlc(
                         session.open, session.high, session.low, session.close,
                         DEFAULT_DOJI_BODY_RATIO, DEFAULT_BODY_WICK_RATIO_LONG,
@@ -157,12 +171,8 @@ pub fn aggregate_daily_session_table(session_aggs: &[SessionAgg]) -> Vec<DailySe
             as_high_time: session_data.get(Session::AS.as_str()).map(|t| t.1.clone()).unwrap_or_default(),
             ln_low_time: session_data.get(Session::LN.as_str()).map(|t| t.0.clone()).unwrap_or_default(),
             ln_high_time: session_data.get(Session::LN.as_str()).map(|t| t.1.clone()).unwrap_or_default(),
-            nyam_low_time: session_data.get(Session::NYAM.as_str()).map(|t| t.0.clone()).unwrap_or_default(),
-            nyam_high_time: session_data.get(Session::NYAM.as_str()).map(|t| t.1.clone()).unwrap_or_default(),
-            nyl_low_time: session_data.get(Session::NYL.as_str()).map(|t| t.0.clone()).unwrap_or_default(),
-            nyl_high_time: session_data.get(Session::NYL.as_str()).map(|t| t.1.clone()).unwrap_or_default(),
-            nypm_low_time: session_data.get(Session::NYPM.as_str()).map(|t| t.0.clone()).unwrap_or_default(),
-            nypm_high_time: session_data.get(Session::NYPM.as_str()).map(|t| t.1.clone()).unwrap_or_default(),
+            ny_low_time,
+            ny_high_time,
         };
         result.push(day_agg);
     }

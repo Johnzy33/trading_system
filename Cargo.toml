@@ -20,3 +20,4 @@ order_engine = { path = "order_engine" }
 risk_engine = { path = "risk_engine" }
 prediction_engine = {path = "prediction_engine"}
 strategy_engine = {path = "strategy_engine"}
+chrono = "0.4.42"

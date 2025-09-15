@@ -78,6 +78,61 @@ pub fn aggregate_sessions(data: &[MarketData]) -> Vec<SessionAgg> {
     out_aggs
 }
 
+#[derive(Debug, Clone)]
+pub struct NyCombinedData {
+    pub high: f64,
+    pub high_session: String,
+    pub low: f64,
+    pub low_session: String,
+}
+
+pub fn find_ny_high_low(sessions: &[SessionAgg]) -> HashMap<String, NyCombinedData> {
+    let mut ny_map: HashMap<String, Vec<&SessionAgg>> = HashMap::new();
+    let mut combined_data: HashMap<String, NyCombinedData> = HashMap::new();
+
+    // Group NY sessions by date
+    for s_agg in sessions {
+        match s_agg.session {
+            Session::NYAM | Session::NYL | Session::NYPM => {
+                ny_map.entry(s_agg.date.clone())
+                      .or_insert_with(Vec::new)
+                      .push(s_agg);
+            },
+            _ => {},
+        }
+    }
+
+    // Find the combined high and low for each day
+    for (date, ny_sessions) in ny_map {
+        if ny_sessions.is_empty() { continue; }
+
+        let mut ny_high = f64::MIN;
+        let mut ny_low = f64::MAX;
+        let mut ny_high_session = String::new();
+        let mut ny_low_session = String::new();
+
+        for session in ny_sessions {
+            if session.high > ny_high {
+                ny_high = session.high;
+                ny_high_session = session.session.as_str().to_string();
+            }
+            if session.low < ny_low {
+                ny_low = session.low;
+                ny_low_session = session.session.as_str().to_string();
+            }
+        }
+
+        combined_data.insert(date, NyCombinedData {
+            high: ny_high,
+            high_session: ny_high_session,
+            low: ny_low,
+            low_session: ny_low_session,
+        });
+    }
+
+    combined_data
+}
+
 impl CsvRecord for SessionAgg {
     fn headers() -> &'static [&'static str] {
         &["date", "session", "open", "high", "low", "close", "volume", "pattern"]

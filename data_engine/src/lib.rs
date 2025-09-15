@@ -3,7 +3,7 @@ pub mod candle_type;
 pub mod session_type;
 pub mod session_data_agg;
 pub mod week_day_data;
-pub mod weekly_table_aggregator;
+pub mod weekly_aggregator;
 pub mod daily_session_aggregator;
 
 // re-exports for simple upstream use
