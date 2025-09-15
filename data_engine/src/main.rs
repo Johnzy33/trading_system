@@ -1,32 +1,39 @@
+use std::error::Error;
+use std::path::Path;
+
 pub mod data_engine;
 pub mod candle_type;
 pub mod session_type;
 pub mod session_data_agg;
+pub mod week_day_data;
+pub mod weekly_table_aggregator;
+pub mod daily_session_aggregator;
 
-use std::error::Error;
-use std::path::Path;
 use crate::data_engine::{DataEngine, write_csv};
-use crate::candle_type::classify_candles;
-use crate::session_data_agg::{aggregate_sessions, SessionAgg};
-use crate::candle_type::CandlePattern;
+use crate::week_day_data::aggregate_periods;
+use crate::weekly_table_aggregator::aggregate_weekly_table;
+use crate::session_data_agg::aggregate_sessions;
+use crate::daily_session_aggregator::aggregate_daily_session_table;
 
-// minimal binary that writes both session-agg CSV and per-candle patterns via generic writer
 fn main() -> Result<(), Box<dyn Error>> {
     let csv_path = Path::new("/home/daredevil/Development/Dev/Learn/trading_system/US2000.csv");
-  //  let out_path = Path::new("/home/daredevil/Development/Dev/Learn/trading_system/US2000_with_patterns.csv");
-    let sessions_out = Path::new("/home/daredevil/Development/Dev/Learn/trading_system/US2000_sessions.csv");
-
+  
     let engine = DataEngine::new();
     let data = engine.fetch_from_csv(csv_path)?;
     println!("Loaded {} rows", data.len());
 
-    let sessions: Vec<SessionAgg> = aggregate_sessions(&data);
-    // write sessions CSV using custom writer exported earlier
-    write_csv(&sessions, sessions_out)?;
+    let (daily, _, _, _, _) = aggregate_periods(&data);
+    write_csv(&daily, "daily_aggregates.csv").expect("Failed to write daily aggregates CSV");
+    println!("Daily aggregates written to daily_aggregates.csv");
 
-   // let patterns: Vec<CandlePattern> = classify_candles(&data, crate::candle_type::DEFAULT_DOJI_BODY_RATIO, crate::candle_type::DEFAULT_BODY_WICK_RATIO_LONG, crate::candle_type::DEFAULT_BODY_WICK_RATIO_SHORT, crate::candle_type::DEFAULT_UPPER_VS_LOWER_RATIO, crate::candle_type::DEFAULT_EPS);
-   // write_csv(&patterns, out_path)?;
+    let weekly_table_aggs = aggregate_weekly_table(&daily);
+    write_csv(&weekly_table_aggs, "weekly_table_aggregates.csv").expect("Failed to write weekly table aggregates CSV");
+    println!("Weekly table aggregates written to weekly_table_aggregates.csv");
 
-  //  println!("Wrote {} session rows and {} pattern rows", sessions.len(), patterns.len());
+    let session_aggs = aggregate_sessions(&data);
+    let daily_session_table_aggs = aggregate_daily_session_table(&session_aggs);
+    write_csv(&daily_session_table_aggs, "daily_session_table_aggregates.csv").expect("Failed to write daily session table aggregates CSV");
+    println!("Daily session table aggregates written to daily_session_table_aggregates.csv");
+    
     Ok(())
 }
