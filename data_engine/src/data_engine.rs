@@ -103,6 +103,7 @@ impl DataEngine {
 
                 let timestamp = format!("{}T{}", date, time);
 
+
                 records.push(MarketData {
                     timestamp,
                     open,
@@ -141,6 +142,9 @@ pub fn parse_ts_to_naive(ts: &str) -> Option<NaiveDateTime> {
     let s = ts.trim();
 
     if let Ok(dt) = NaiveDate::parse_from_str(s, "%Y-%m-%d") {
+        return Some(dt.and_hms_opt(0, 0, 0).unwrap());
+    }
+    if let Ok(dt) = NaiveDate::parse_from_str(s, "%Y.%m.%d") {
         return Some(dt.and_hms_opt(0, 0, 0).unwrap());
     }
 

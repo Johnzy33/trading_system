@@ -2,13 +2,13 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use crate::data_engine::{CsvRecord, MarketData};
 use crate::session_type::{session_from_timestamp_enum, Session};
+use serde::{Deserialize, Serialize};
 use crate::candle_type::{pattern_from_ohlc, DEFAULT_DOJI_BODY_RATIO, DEFAULT_BODY_WICK_RATIO_LONG, DEFAULT_BODY_WICK_RATIO_SHORT, DEFAULT_UPPER_VS_LOWER_RATIO, DEFAULT_EPS};
 use std::error::Error;
 use std::path::Path;
 use csv::WriterBuilder;
-use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)] 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionAgg {
     pub date: String,
     pub session: Session,
@@ -17,8 +17,8 @@ pub struct SessionAgg {
     pub low: f64,
     pub close: f64,
     pub volume: f64,
-    pub start_ts: String,
-    pub end_ts: String,
+    pub high_ts: String, // New field to store the timestamp of the high
+    pub low_ts: String, // New field to store the timestamp of the low
     pub pattern: String,
 }
 
@@ -26,18 +26,23 @@ pub fn aggregate_sessions(data: &[MarketData]) -> Vec<SessionAgg> {
     let mut aggs: HashMap<(String, Session), SessionAgg> = HashMap::new();
 
     for r in data {
-        let date_part = r.timestamp.split(['T', ' ']).next().unwrap_or("").trim().replace('.', "-");
+        let date_part = r.timestamp.split('T').next().unwrap_or("").to_string();
         let session = session_from_timestamp_enum(&r.timestamp);
         if session == Session::Unknown { continue; }
         let key = (date_part.clone(), session);
 
         aggs.entry(key)
             .and_modify(|agg| {
-                if r.high > agg.high { agg.high = r.high; }
-                if r.low < agg.low { agg.low = r.low; }
+                if r.high > agg.high { 
+                    agg.high = r.high;
+                    agg.high_ts = r.timestamp.clone();
+                }
+                if r.low < agg.low { 
+                    agg.low = r.low;
+                    agg.low_ts = r.timestamp.clone();
+                }
                 agg.close = r.close;
                 agg.volume += r.volume;
-                agg.end_ts = r.timestamp.clone();
             })
             .or_insert_with(|| SessionAgg {
                 date: date_part,
@@ -47,8 +52,8 @@ pub fn aggregate_sessions(data: &[MarketData]) -> Vec<SessionAgg> {
                 low: r.low,
                 close: r.close,
                 volume: r.volume,
-                start_ts: r.timestamp.clone(),
-                end_ts: r.timestamp.clone(),
+                high_ts: r.timestamp.clone(),
+                low_ts: r.timestamp.clone(),
                 pattern: String::new(),
             });
     }
@@ -69,6 +74,7 @@ pub fn aggregate_sessions(data: &[MarketData]) -> Vec<SessionAgg> {
             other => other,
         }
     });
+
     out_aggs
 }
 
